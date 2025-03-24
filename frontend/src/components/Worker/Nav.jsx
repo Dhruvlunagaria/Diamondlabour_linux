@@ -6,7 +6,8 @@ function Nav(props) {
 
     const logout = async() => {
         try{
-            axios.post("http://localhost:8000/api/v1/users/logout")
+            // axios.post("http://localhost:8000/api/v1/users/logout")
+            axios.post("http://localhost:8001/api/v1/users/logout")
         }catch(err){
             console.log(err);
         }

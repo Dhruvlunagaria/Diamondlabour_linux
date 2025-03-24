@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: green-app
+  labels:
+    app: green
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: green
+  template:
+    metadata:
+      labels:
+        app: green
+    spec:
+      containers:
+        - name: frontend
+          image: your-dockerhub-repo/frontend:latest
+          ports:
+            - containerPort: 3000
+        - name: backend
+          image: your-dockerhub-repo/backend:latest
+          ports:
+            - containerPort: 8001

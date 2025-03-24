@@ -27,7 +27,7 @@ function Section({ fullName, tableNo, email, status, userName, diamond, diamondC
 
   const handleDeleteDiamond = async() => {
     try {
-      await axios.post("http://localhost:8000/api/v1/diamond/deleteDiamond", deleteDiamond);
+      await axios.post("http://localhost:8001/api/v1/diamond/deleteDiamond", deleteDiamond);
       window.location.reload()
     } catch (error) {
       console.log(error);

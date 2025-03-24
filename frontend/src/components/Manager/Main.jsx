@@ -20,7 +20,7 @@ function Main() {
     useEffect(() => {
         const fetchData = async() => {
             try {
-                const response = await axios.get('http://localhost:8000/api/v1/manager/alldata');
+                const response = await axios.get('http://localhost:8001/api/v1/manager/alldata');
                 setAllData(response.data.allData)
 
                 const total = response.data.allData.reduce((count, worker) => {

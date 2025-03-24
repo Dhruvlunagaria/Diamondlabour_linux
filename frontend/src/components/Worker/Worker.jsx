@@ -13,7 +13,7 @@ function Worker() {
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const response = await axios.post("http://localhost:8000/api/v1/worker/getworkerdata", userData);
+        const response = await axios.post("http://localhost:8001/api/v1/worker/getworkerdata", userData);
         setData(response.data.data);
         setShowPopup(true)
       } catch (err) {

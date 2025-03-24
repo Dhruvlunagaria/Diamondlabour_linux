@@ -23,7 +23,7 @@ function Diamond() {
   const handleSubmit = async (e) =>{
     e.preventDefault()
     try {
-      const response = await axios.post("http://localhost:8000/api/v1/diamond/addDiamond", addDiamond)
+      const response = await axios.post("http://localhost:8001/api/v1/diamond/addDiamond", addDiamond)
       console.log(response.data);
     } catch (error) {
       console.log(error);
@@ -36,7 +36,7 @@ function Diamond() {
   useEffect(() => {
     const fetchData = async() => {
       try {
-        const response = await axios.get(`http://localhost:8000/api/v1/manager/alldata`);
+        const response = await axios.get(`http://localhost:8001/api/v1/manager/alldata`);
         const allData = response.data.allData
         const tableWorkersData = allData.filter(worker => worker.tableNo === parseInt(tableNo));
         setTableWorkers(tableWorkersData);

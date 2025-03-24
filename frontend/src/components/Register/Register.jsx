@@ -36,7 +36,7 @@ function Register() {
     const handleSubmit = async (e) =>{
         e.preventDefault()
         try {
-            const response = await axios.post("http://localhost:8000/api/v1/users/register", user)
+            const response = await axios.post("http://localhost:8001/api/v1/users/register", user)
             // history.push(`/${user.post}dashboard`)
             console.log(response.data);
         } catch (error) {

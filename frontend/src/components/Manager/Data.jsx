@@ -15,7 +15,7 @@ function Data({srNo, fullName, userName, tableNo, email}) {
     const confirmDelete = window.confirm("Are you sure you want to delete?");
     if(confirmDelete){
       try {
-        await axios.post("http://localhost:8000/api/v1/users/deleteUser",deleteUser)
+        await axios.post("http://localhost:8001/api/v1/users/deleteUser",deleteUser)
         window.location.reload()
       } catch (error) {
         console.log(error);
