@@ -16,10 +16,10 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: your-dockerhub-repo/frontend:latest
+          image: dhruv2412/green-frontend:latest
           ports:
             - containerPort: 3000
         - name: backend
-          image: your-dockerhub-repo/backend:latest
+          image: dhruv2412/green-backend:latest
           ports:
             - containerPort: 8001

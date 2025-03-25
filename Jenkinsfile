@@ -3,32 +3,33 @@ pipeline {
     environment {
         KUBE_CONTEXT = "minikube"
         NAMESPACE = "default"  
-        DOCKERHUB_REPO = "your-dockerhub-repo"
+        DOCKERHUB_REPO = "dhruv2412"
     }
     stages {
         stage('Checkout Code') {
             steps {
-                git 'https://your-repo-url.git'
+                git 'https://github.com/Dhruvlunagaria/DiamondLabour.git'
             }
         }
         stage('Deploy New Version') {
             steps {
                 script {
-                    def currentVersion = sh(script: "kubectl get deployments -l app=active --no-headers -o custom-columns=':metadata.name'", returnStdout: true).trim()
                     
-                    if (currentVersion == "blue-app") {
+                    def currentVersion = sh(script: "kubectl get deployments -l app=active --no-headers -o custom-columns=':metadata.name'" || echo 'none', returnStdout: true).trim()
+
+                    if (currentVersion == "none" || currentVersion == "blue-app") {
                         echo "🔵 Blue is Active. Deploying Green..."
                         sh """
                             kubectl apply -f k8s/green-deployment.yaml
-                            kubectl set image deployment/green-app frontend=${DOCKERHUB_REPO}/frontend-green:latest --record
-                            kubectl set image deployment/green-app backend=${DOCKERHUB_REPO}/backend-green:latest --record
+                            kubectl set image deployment/green-app frontend=${DOCKERHUB_REPO}/green-frontend:latest --record
+                            kubectl set image deployment/green-app backend=${DOCKERHUB_REPO}/green-backend:latest --record
                         """
                     } else {
                         echo "🟢 Green is Active. Deploying Blue..."
                         sh """
                             kubectl apply -f k8s/blue-deployment.yaml
-                            kubectl set image deployment/blue-app frontend=${DOCKERHUB_REPO}/frontend-blue:latest --record
-                            kubectl set image deployment/blue-app backend=${DOCKERHUB_REPO}/backend-blue:latest --record
+                            kubectl set image deployment/blue-app frontend=${DOCKERHUB_REPO}/blue-frontend:latest --record
+                            kubectl set image deployment/blue-app backend=${DOCKERHUB_REPO}/blue-backend:latest --record
                         """
                     }
                 }

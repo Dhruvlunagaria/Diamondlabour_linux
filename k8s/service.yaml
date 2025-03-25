@@ -1,3 +1,18 @@
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: app-service
+# spec:
+#   type: LoadBalancer  
+#   selector:
+#     app: active  
+#   ports:
+#     - protocol: TCP
+#       port: 80         
+#       targetPort: 3000 
+#     - protocol: TCP
+#       port: 8001       
+#       targetPort: 8001 
 apiVersion: v1
 kind: Service
 metadata:
@@ -10,6 +25,8 @@ spec:
     - protocol: TCP
       port: 80         
       targetPort: 3000 
+      name: frontend-port   # ✅ Required name for frontend port
     - protocol: TCP
       port: 8001       
-      targetPort: 8001 
+      targetPort: 8001  
+      name: backend-port    # ✅ Required name for backend port
