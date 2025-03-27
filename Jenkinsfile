@@ -15,7 +15,7 @@ pipeline {
             steps {
                 script {
                     
-                    def currentVersion = sh(script: "kubectl get deployments -l app=active --no-headers -o custom-columns=':metadata.name'" || echo 'none', returnStdout: true).trim()
+                   def currentVersion = sh(script: """kubectl get deployments -l app=active --no-headers -o custom-columns=':metadata.name' || echo none""", returnStdout: true).trim()
 
                     if (currentVersion == "none" || currentVersion == "blue-app") {
                         echo "🔵 Blue is Active or No Active Deployment Found. Deploying Green..."
