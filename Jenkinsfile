@@ -8,7 +8,7 @@ pipeline {
     stages {
         stage('Checkout Code') {
             steps {
-                git 'https://github.com/Dhruvlunagaria/DiamondLabour.git'
+                  git credentialsId: 'blue-green', git 'https://github.com/Dhruvlunagaria/Diamondlabour_linux'
             }
         }
         stage('Deploy New Version') {
@@ -18,7 +18,7 @@ pipeline {
                     def currentVersion = sh(script: "kubectl get deployments -l app=active --no-headers -o custom-columns=':metadata.name'" || echo 'none', returnStdout: true).trim()
 
                     if (currentVersion == "none" || currentVersion == "blue-app") {
-                        echo "🔵 Blue is Active. Deploying Green..."
+                        echo "🔵 Blue is Active or No Active Deployment Found. Deploying Green..."
                         sh """
                             kubectl apply -f k8s/green-deployment.yaml
                             kubectl set image deployment/green-app frontend=${DOCKERHUB_REPO}/green-frontend:latest --record
