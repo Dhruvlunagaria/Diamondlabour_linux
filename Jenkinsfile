@@ -8,7 +8,7 @@ pipeline {
     stages {
         stage('Checkout Code') {
             steps {
-                  git credentialsId: 'blue-green', git 'https://github.com/Dhruvlunagaria/Diamondlabour_linux'
+                  git credentialsId: 'blue-green', url: 'https://github.com/Dhruvlunagaria/Diamondlabour_linux'
             }
         }
         stage('Deploy New Version') {
