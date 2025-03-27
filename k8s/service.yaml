@@ -18,9 +18,9 @@ kind: Service
 metadata:
   name: app-service
 spec:
-  type: LoadBalancer  
+  type: ClusterIP
   selector:
-    app: active  
+    app: blue
   ports:
     - protocol: TCP
       port: 80         
