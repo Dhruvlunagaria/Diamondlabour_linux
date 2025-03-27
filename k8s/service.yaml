@@ -20,7 +20,7 @@ metadata:
 spec:
   type: ClusterIP
   selector:
-    app: blue
+    app: active
   ports:
     - protocol: TCP
       port: 80         
