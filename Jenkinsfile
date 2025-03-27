@@ -54,7 +54,7 @@ pipeline {
         stage('Health Check') {
             steps {
                 script {
-                    def status = sh(script: 'curl -f http://your-app.com', returnStatus: true)
+                    def status = sh(script: 'curl -f http://diamondlab.com', returnStatus: true)
                     if (status != 0) {
                         error("❌ Deployment failed! Rolling back...")
                     }
