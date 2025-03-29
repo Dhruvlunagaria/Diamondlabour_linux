@@ -244,44 +244,42 @@
 // }
 
 
+
 pipeline {
     agent any
 
     environment {
-        KUBECONFIG = "/var/lib/jenkins/.kube/config"// Adjust if needed
-        BLUE_IMAGE = "dhruv2412/blue-frontend:latest"
-        GREEN_IMAGE = "dhruv2412/green-frontend:latest"
-        BLUE_DEPLOY = "blue-app"
-        GREEN_DEPLOY = "green-app"
-        BLUE_SERVICE = "blue-service"
-        GREEN_SERVICE = "green-service"
-        INGRESS_NAME = "app-ingress"
-        DOMAIN_NAME = "diamondlab.com"
+        KUBECONFIG = "/var/lib/jenkins/.kube/config"  // Path to your kubeconfig file
     }
 
     stages {
         stage('Checkout Code') {
             steps {
-                git branch: 'main', credentialsId: 'blue-green', url: 'https://github.com/Dhruvlunagaria/Diamondlabour_linux.git'
+                script {
+                    checkout scm
+                }
             }
         }
 
         stage('Deploy New Version') {
             steps {
                 script {
-                    // Get active deployment
-                    def activeApp = sh(script: "kubectl get deployments -l app=active --no-headers -o custom-columns=:metadata.name", returnStdout: true).trim()
-                    
-                    // Set new deployment & image
-                    def newApp = (activeApp == BLUE_DEPLOY) ? GREEN_DEPLOY : BLUE_DEPLOY
-                    def newImage = (newApp == BLUE_DEPLOY) ? BLUE_IMAGE : GREEN_IMAGE
+                    def activeDeployment = sh(script: "kubectl get deployments -l app=active --no-headers -o custom-columns=:metadata.name", returnStdout: true).trim()
+                    echo "Active Deployment: ${activeDeployment}"
 
-                    echo "Deploying new version: ${newApp} with image: ${newImage}"
-                    
-                    // Apply the new deployment
-                    sh "kubectl apply -f k8s/${newApp}-deployment.yaml"
-                    sh "kubectl label deployment ${newApp} app=inactive --overwrite"
-                    sh "kubectl set image deployment/${newApp} frontend=${newImage}"
+                    def newDeployment, newService
+                    if (activeDeployment == "green-app") {
+                        newDeployment = "blue-deployment.yaml"
+                        newService = "blue-service.yaml"
+                        echo "Deploying Blue Version"
+                    } else {
+                        newDeployment = "green-deployment.yaml"
+                        newService = "green-service.yaml"
+                        echo "Deploying Green Version"
+                    }
+
+                    sh "kubectl apply -f k8s/${newDeployment}"
+                    sh "kubectl apply -f k8s/${newService}"
                 }
             }
         }
@@ -289,21 +287,33 @@ pipeline {
         stage('Switch Traffic') {
             steps {
                 script {
-                    // Get active deployment
-                    def activeApp = sh(script: "kubectl get deployments -l app=active --no-headers -o custom-columns=:metadata.name", returnStdout: true).trim()
+                    def activeService = sh(script: "kubectl get deployments -l app=active --no-headers -o custom-columns=:metadata.name", returnStdout: true).trim()
+                    def newService = (activeService == "green-app") ? "blue-service" : "green-service"
 
-                    // Determine new active deployment
-                    def newActive = (activeApp == BLUE_DEPLOY) ? GREEN_DEPLOY : BLUE_DEPLOY
-                    def newService = (newActive == BLUE_DEPLOY) ? BLUE_SERVICE : GREEN_SERVICE
-
-                    echo "Switching traffic to ${newActive} via ${newService}"
-
-                    // Switch labels
-                    sh "kubectl label deployment ${activeApp} app=inactive --overwrite || true"
-                    sh "kubectl label deployment ${newActive} app=active --overwrite"
-
-                    // Update Ingress
-                    sh "kubectl patch ingress ${INGRESS_NAME} -p '{\"spec\":{\"rules\":[{\"host\":\"${DOMAIN_NAME}\",\"http\":{\"paths\":[{\"path\":\"/\",\"pathType\":\"Prefix\",\"backend\":{\"service\":{\"name\":\"${newService}\",\"port\":{\"number\":80}}}}]}}]}}'"
+                    sh """
+                    kubectl patch ingress app-ingress -p '{
+                        "spec": {
+                            "rules": [{
+                                "host": "diamondlab.com",
+                                "http": {
+                                    "paths": [{
+                                        "path": "/",
+                                        "pathType": "Prefix",
+                                        "backend": {
+                                            "service": {
+                                                "name": "${newService}",
+                                                "port": {
+                                                    "number": 80
+                                                }
+                                            }
+                                        }
+                                    }]
+                                }
+                            }]
+                        }
+                    }'
+                    """
+                    echo "Switched traffic to ${newService}"
                 }
             }
         }
@@ -311,10 +321,10 @@ pipeline {
         stage('Delete Old Version') {
             steps {
                 script {
-                    def inactiveApp = sh(script: "kubectl get deployments -l app=inactive --no-headers -o custom-columns=:metadata.name", returnStdout: true).trim()
-                    
-                    echo "Deleting old version: ${inactiveApp}"
-                    sh "kubectl delete deployment ${inactiveApp} || true"
+                    def inactiveDeployment = sh(script: "kubectl get deployments -l app=active --no-headers -o custom-columns=:metadata.name", returnStdout: true).trim() == "green-app" ? "blue-deployment.yaml" : "green-deployment.yaml"
+
+                    echo "Deleting old deployment: ${inactiveDeployment}"
+                    sh "kubectl delete -f k8s/${inactiveDeployment}"
                 }
             }
         }
@@ -322,12 +332,12 @@ pipeline {
 
     post {
         success {
-            echo "✅ Blue-Green Deployment Successful!"
+            echo "✅ Blue-Green Deployment Completed Successfully!"
         }
         failure {
-            echo "❌ Deployment failed! Rolling back to previous version..."
-            sh "kubectl apply -f k8s/${GREEN_DEPLOY}-deployment.yaml || true"
-            sh "kubectl patch ingress ${INGRESS_NAME} -p '{\"spec\":{\"rules\":[{\"host\":\"${DOMAIN_NAME}\",\"http\":{\"paths\":[{\"path\":\"/\",\"pathType\":\"Prefix\",\"backend\":{\"service\":{\"name\":\"${GREEN_SERVICE}\",\"port\":{\"number\":80}}}}]}}]}}' || true"
+            echo "❌ Deployment failed! Rolling back..."
+            sh "kubectl apply -f k8s/green-deployment.yaml || true"
+            sh "kubectl patch ingress app-ingress -p '{\"spec\":{\"rules\":[{\"host\":\"diamondlab.com\",\"http\":{\"paths\":[{\"path\":\"/\",\"pathType\":\"Prefix\",\"backend\":{\"service\":{\"name\":\"green-service\",\"port\":{\"number\":80}}}}]}}}]}}' || true"
         }
     }
 }
