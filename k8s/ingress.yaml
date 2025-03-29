@@ -1,3 +1,19 @@
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: app-ingress
+# spec:
+#   rules:
+#   - host: diamondlab.com 
+#     http:
+#       paths:
+#       - path: /
+#         pathType: Prefix
+#         backend:
+#           service:
+#             name: app-service
+#             port:
+#               number: 80
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
