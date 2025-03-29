@@ -3,16 +3,19 @@
 # metadata:
 #   name: app-service
 # spec:
-#   type: LoadBalancer  
+#   type: ClusterIP
 #   selector:
-#     app: active  
+#     app: active
 #   ports:
 #     - protocol: TCP
 #       port: 80         
 #       targetPort: 3000 
+#       name: frontend-port   # ✅ Required name for frontend port
 #     - protocol: TCP
 #       port: 8001       
-#       targetPort: 8001 
+#       targetPort: 8001  
+#       name: backend-port    # ✅ Required name for backend port
+
 apiVersion: v1
 kind: Service
 metadata:
@@ -20,13 +23,13 @@ metadata:
 spec:
   type: ClusterIP
   selector:
-    app: active
+    version: active   # ✅ Correct selector for active version
   ports:
     - protocol: TCP
       port: 80         
       targetPort: 3000 
-      name: frontend-port   # ✅ Required name for frontend port
+      name: frontend-port  
     - protocol: TCP
       port: 8001       
       targetPort: 8001  
-      name: backend-port    # ✅ Required name for backend port
+      name: backend-port
