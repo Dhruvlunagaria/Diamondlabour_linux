@@ -248,7 +248,7 @@ pipeline {
     agent any
 
     environment {
-        KUBECONFIG = "/root/.kube/config" // Adjust if needed
+        KUBECONFIG = "/var/lib/jenkins/.kube/config"// Adjust if needed
         BLUE_IMAGE = "dhruv2412/blue-frontend:latest"
         GREEN_IMAGE = "dhruv2412/green-frontend:latest"
         BLUE_DEPLOY = "blue-app"
