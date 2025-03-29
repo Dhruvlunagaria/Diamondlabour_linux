@@ -296,14 +296,18 @@ pipeline {
                         sh """
                             kubectl label deployment blue-app app=inactive --overwrite
                             kubectl label deployment green-app app=active --overwrite
-                            kubectl patch service green-service -p '{"spec":{"selector":{"app":"green"}}}'
+                            kubectl patch service blue-service -p '{"spec":{"selector":{"app":"inactive"}}}'
+                            kubectl patch service green-service -p '{"spec":{"selector":{"app":"active"}}}'
+                            kubectl patch ingress app-ingress -p '{"spec":{"rules":[{"host":"diamondlab.com","http":{"paths":[{"path":"/","pathType":"Prefix","backend":{"service":{"name":"green-service","port":{"number":80}}}}]}}]}}'
                         """
                     } else {
                         echo "Switching traffic to Blue..."
                         sh """
                             kubectl label deployment green-app app=inactive --overwrite
                             kubectl label deployment blue-app app=active --overwrite
-                            kubectl patch service blue-service -p '{"spec":{"selector":{"app":"blue"}}}'
+                            kubectl patch service green-service -p '{"spec":{"selector":{"app":"inactive"}}}'
+                            kubectl patch service blue-service -p '{"spec":{"selector":{"app":"active"}}}'
+                            kubectl patch ingress app-ingress -p '{"spec":{"rules":[{"host":"diamondlab.com","http":{"paths":[{"path":"/","pathType":"Prefix","backend":{"service":{"name":"blue-service","port":{"number":80}}}}]}}]}}'
                         """
                     }
                 }
@@ -334,9 +338,15 @@ pipeline {
                 def previousVersion = sh(script: "kubectl get deployments -l app=active --no-headers -o custom-columns=':metadata.name'", returnStdout: true).trim()
 
                 if (previousVersion == "blue-app") {
-                    sh "kubectl apply -f k8s/blue-deployment.yaml"
+                    sh """
+                        kubectl apply -f k8s/blue-deployment.yaml
+                        kubectl patch ingress app-ingress -p '{"spec":{"rules":[{"host":"diamondlab.com","http":{"paths":[{"path":"/","pathType":"Prefix","backend":{"service":{"name":"blue-service","port":{"number":80}}}}]}}]}}'
+                    """
                 } else {
-                    sh "kubectl apply -f k8s/green-deployment.yaml"
+                    sh """
+                        kubectl apply -f k8s/green-deployment.yaml
+                        kubectl patch ingress app-ingress -p '{"spec":{"rules":[{"host":"diamondlab.com","http":{"paths":[{"path":"/","pathType":"Prefix","backend":{"service":{"name":"green-service","port":{"number":80}}}}]}}]}}'
+                    """
                 }
             }
         }
@@ -345,3 +355,4 @@ pipeline {
         }
     }
 }
+
