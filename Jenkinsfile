@@ -150,19 +150,20 @@ pipeline {
         stage('Switch Traffic') {
             steps {
                 script {
-                    def currentVersion = sh(script: "kubectl get deployments -l app=active --no-headers -o custom-columns=':metadata.name'", returnStdout: true).trim()
-
-                    if (currentVersion == "none" || currentVersion == "blue-app") {
+                    // def currentVersion = sh(script: "kubectl get deployments -l app=active --no-headers -o custom-columns=':metadata.name'", returnStdout: true).trim()
+                    def currentVersion = sh(script: "kubectl get pods -l app=active --no-headers -o custom-columns=':metadata.labels.app'", returnStdout: true).trim()
+                  
+                    if (currentVersion == "none" || currentVersion == "blue") {
                         echo "✅ Switching traffic to Green..."
                         sh """
-                            kubectl label deployment green-app app=active --overwrite
-                            kubectl label deployment blue-app app- || true
+                            kubectl label pods -l app=green app=active --overwrite
+                            kkubectl label pods -l app=blue app- --overwrite
                         """
                     } else {
                         echo "✅ Switching traffic to Blue..."
                         sh """
-                            kubectl label deployment blue-app app=active --overwrite
-                            kubectl label deployment green-app app- || true
+                            kubectl label pods -l app=blue app=active --overwrite
+                            kubectl label pods -l app=green app- --overwrite
                         """
                     }
 
