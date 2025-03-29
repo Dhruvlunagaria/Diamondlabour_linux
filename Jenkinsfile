@@ -263,28 +263,25 @@ pipeline {
         stage('Deploy New Version') {
             steps {
                 script {
-                    def currentIngressService = sh(script: "kubectl get ingress app-ingress -o jsonpath='{.spec.rules[0].http.paths[0].backend.service.name}' || echo none", returnStdout: true).trim()
+                    def currentVersion = sh(script: "kubectl get deployments -l app=active --no-headers -o custom-columns=':metadata.name' || echo none", returnStdout: true).trim()
 
-                    if (currentIngressService == "green-service") {
-                        echo "🟢 Green is active. Deploying Blue..."
-                        sh """
-                            kubectl apply -f k8s/blue-deployment.yaml
-                            kubectl label deployment blue-app app=inactive --overwrite
-                            kubectl set image deployment/blue-app frontend=${DOCKERHUB_REPO}/blue-frontend:latest --record
-                            kubectl set image deployment/blue-app backend=${DOCKERHUB_REPO}/blue-backend:latest --record
-                        """
-                    } else {
-                        echo "🔵 Blue is active. Deploying Green..."
+                    if (currentVersion == "none" || currentVersion == "blue-app") {
+                        echo "Deploying Green..."
                         sh """
                             kubectl apply -f k8s/green-deployment.yaml
                             kubectl label deployment green-app app=inactive --overwrite
-                            kubectl set image deployment/green-app frontend=${DOCKERHUB_REPO}/green-frontend:latest --record
-                            kubectl set image deployment/green-app backend=${DOCKERHUB_REPO}/green-backend:latest --record
+                            kubectl set image deployment/green-app frontend=${DOCKERHUB_REPO}/green-frontend:latest
+                            kubectl set image deployment/green-app backend=${DOCKERHUB_REPO}/green-backend:latest
+                        """
+                    } else {
+                        echo "Deploying Blue..."
+                        sh """
+                            kubectl apply -f k8s/blue-deployment.yaml
+                            kubectl label deployment blue-app app=inactive --overwrite
+                            kubectl set image deployment/blue-app frontend=${DOCKERHUB_REPO}/blue-frontend:latest
+                            kubectl set image deployment/blue-app backend=${DOCKERHUB_REPO}/blue-backend:latest
                         """
                     }
-
-                    echo "⏳ Waiting for deployment rollout..."
-                    sh "kubectl rollout status deployment/${currentIngressService} --timeout=90s"
                 }
             }
         }
@@ -292,49 +289,22 @@ pipeline {
         stage('Switch Traffic') {
             steps {
                 script {
-                    def currentIngressService = sh(script: "kubectl get ingress app-ingress -o jsonpath='{.spec.rules[0].http.paths[0].backend.service.name}' || echo none", returnStdout: true).trim()
+                    def currentVersion = sh(script: "kubectl get deployments -l app=active --no-headers -o custom-columns=':metadata.name' || echo none", returnStdout: true).trim()
 
-                    if (currentIngressService == "green-service") {
-                        echo "✅ Switching traffic to Blue..."
+                    if (currentVersion == "none" || currentVersion == "blue-app") {
+                        echo "Switching traffic to Green..."
                         sh """
-                            kubectl patch ingress app-ingress -p '{"spec":{"rules":[{"host":"diamondlab.com","http":{"paths":[{"path":"/","pathType":"Prefix","backend":{"service":{"name":"blue-service","port":{"number":80}}}}]}}]}}'
+                            kubectl label deployment blue-app app=inactive --overwrite
+                            kubectl label deployment green-app app=active --overwrite
+                            kubectl patch service green-service -p '{"spec":{"selector":{"app":"green"}}}'
                         """
                     } else {
-                        echo "✅ Switching traffic to Green..."
+                        echo "Switching traffic to Blue..."
                         sh """
-                            kubectl patch ingress app-ingress -p '{"spec":{"rules":[{"host":"diamondlab.com","http":{"paths":[{"path":"/","pathType":"Prefix","backend":{"service":{"name":"green-service","port":{"number":80}}}}]}}]}}'
+                            kubectl label deployment green-app app=inactive --overwrite
+                            kubectl label deployment blue-app app=active --overwrite
+                            kubectl patch service blue-service -p '{"spec":{"selector":{"app":"blue"}}}'
                         """
-                    }
-
-                    echo "⏳ Waiting for new pods to become ready..."
-                    sleep(time: 30, unit: "SECONDS")
-                }
-            }
-        }
-
-        stage('Health Check') {
-            steps {
-                script {
-                    def maxRetries = 5
-                    def waitTime = 10  // seconds
-                    def success = false
-
-                    for (int i = 0; i < maxRetries; i++) {
-                        echo "🔍 Health Check Attempt ${i+1}/${maxRetries}..."
-                        def status = sh(script: 'curl -f http://diamondlab.com', returnStatus: true)
-
-                        if (status == 0) {
-                            echo "✅ Service is healthy!"
-                            success = true
-                            break
-                        }
-
-                        echo "⚠️ Service not ready yet. Retrying in ${waitTime} seconds..."
-                        sleep(time: waitTime, unit: "SECONDS")
-                    }
-
-                    if (!success) {
-                        error("❌ Deployment failed! Rolling back...")
                     }
                 }
             }
@@ -343,13 +313,13 @@ pipeline {
         stage('Delete Old Version') {
             steps {
                 script {
-                    def currentIngressService = sh(script: "kubectl get ingress app-ingress -o jsonpath='{.spec.rules[0].http.paths[0].backend.service.name}' || echo none", returnStdout: true).trim()
+                    def currentVersion = sh(script: "kubectl get deployments -l app=active --no-headers -o custom-columns=':metadata.name'", returnStdout: true).trim()
 
-                    if (currentIngressService == "blue-service") {
-                        echo "🔵 Blue is Active. Deleting Green..."
+                    if (currentVersion == "blue-app") {
+                        echo "Deleting Green..."
                         sh 'kubectl delete -f k8s/green-deployment.yaml || true'
                     } else {
-                        echo "🟢 Green is Active. Deleting Blue..."
+                        echo "Deleting Blue..."
                         sh 'kubectl delete -f k8s/blue-deployment.yaml || true'
                     }
                 }
@@ -361,18 +331,12 @@ pipeline {
         failure {
             echo "❌ Deployment failed! Rolling back to previous version..."
             script {
-                def previousIngressService = sh(script: "kubectl get ingress app-ingress -o jsonpath='{.spec.rules[0].http.paths[0].backend.service.name}' || echo none", returnStdout: true).trim()
+                def previousVersion = sh(script: "kubectl get deployments -l app=active --no-headers -o custom-columns=':metadata.name'", returnStdout: true).trim()
 
-                if (previousIngressService == "blue-service") {
-                    sh """
-                        kubectl apply -f k8s/blue-deployment.yaml
-                        kubectl apply -f k8s/ingress.yaml
-                    """
+                if (previousVersion == "blue-app") {
+                    sh "kubectl apply -f k8s/blue-deployment.yaml"
                 } else {
-                    sh """
-                        kubectl apply -f k8s/green-deployment.yaml
-                        kubectl apply -f k8s/ingress.yaml
-                    """
+                    sh "kubectl apply -f k8s/green-deployment.yaml"
                 }
             }
         }
@@ -381,7 +345,3 @@ pipeline {
         }
     }
 }
-
-
-
-
