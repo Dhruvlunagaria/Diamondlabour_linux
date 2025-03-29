@@ -8,11 +8,11 @@ spec:
   replicas: 2
   selector:
     matchLabels:
-      app: active
+      app: blue
   template:
     metadata:
       labels:
-        app: active
+        app: blue
     spec:
       containers:
         - name: frontend
