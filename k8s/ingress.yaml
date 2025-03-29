@@ -27,6 +27,6 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: app-service
+            name: green-service  # ✅ Default points to Green
             port:
               number: 80
