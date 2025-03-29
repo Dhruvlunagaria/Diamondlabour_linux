@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: green-app
   labels:
-    app: active
+    app: green
 spec:
   replicas: 2
   selector:
