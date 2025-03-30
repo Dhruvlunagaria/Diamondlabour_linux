@@ -24,13 +24,11 @@ pipeline {
                 script {
                     def deploymentFile = "k8s/${params.DEPLOY_ENV}-deployment.yaml"
                     def serviceFile = "k8s/${params.DEPLOY_ENV}-service.yaml"
-
-                    withKubeConfig([credentialsId: 'k8-token', contextName: 'minikube', namespace: KUBE_NAMESPACE]) {
-                        sh """
-                            kubectl apply -f ${deploymentFile} -n ${KUBE_NAMESPACE}
-                            kubectl apply -f ${serviceFile} -n ${KUBE_NAMESPACE}
-                        """
-                    }
+                    
+                    sh """
+                        kubectl apply -f ${deploymentFile} -n ${KUBE_NAMESPACE}
+                        kubectl apply -f ${serviceFile} -n ${KUBE_NAMESPACE}
+                    """
                 }
             }
         }
@@ -38,9 +36,7 @@ pipeline {
         stage('Deploy Ingress') {
             steps {
                 script {
-                    withKubeConfig([credentialsId: 'k8-token', contextName: 'minikube', namespace: KUBE_NAMESPACE]) {
-                        sh "kubectl apply -f k8s/ingress.yaml -n ${KUBE_NAMESPACE}"
-                    }
+                    sh "kubectl apply -f k8s/ingress.yaml -n ${KUBE_NAMESPACE}"
                 }
             }
         }
@@ -52,30 +48,28 @@ pipeline {
             steps {
                 script {
                     def newEnv = params.DEPLOY_ENV
-
-                    withKubeConfig([credentialsId: 'k8-token', contextName: 'minikube', namespace: KUBE_NAMESPACE]) {
-                        sh '''
-                            kubectl patch ingress app-ingress -p '{
-                                "spec": { 
-                                    "rules": [{
-                                        "host": "app.minikube",
-                                        "http": {
-                                            "paths": [{
-                                                "path": "/",
-                                                "pathType": "Prefix",
-                                                "backend": {
-                                                    "service": {
-                                                        "name": "' + newEnv + '-service",
-                                                        "port": { "number": 80 }
-                                                    }
+                    
+                    sh '''
+                        kubectl patch ingress app-ingress -p '{
+                            "spec": { 
+                                "rules": [{
+                                    "host": "app.minikube",
+                                    "http": {
+                                        "paths": [{
+                                            "path": "/",
+                                            "pathType": "Prefix",
+                                            "backend": {
+                                                "service": {
+                                                    "name": "''' + newEnv + '''-service",
+                                                    "port": { "number": 80 }
                                                 }
-                                            }]
-                                        }
-                                    }]
-                                }
-                            }' -n ${KUBE_NAMESPACE}
-                        '''
-                    }
+                                            }
+                                        }]
+                                    }
+                                }]
+                            }
+                        }' -n ${KUBE_NAMESPACE}
+                    '''
                     echo "Traffic switched to ${newEnv} environment!"
                 }
             }
@@ -85,13 +79,11 @@ pipeline {
             steps {
                 script {
                     def verifyEnv = params.DEPLOY_ENV
-
-                    withKubeConfig([credentialsId: 'k8-token', contextName: 'minikube', namespace: KUBE_NAMESPACE]) {
-                        sh """
-                            kubectl get pods -l version=${verifyEnv} -n ${KUBE_NAMESPACE}
-                            kubectl get svc ${verifyEnv}-service -n ${KUBE_NAMESPACE}
-                        """
-                    }
+                    
+                    sh """
+                        kubectl get pods -l version=${verifyEnv} -n ${KUBE_NAMESPACE}
+                        kubectl get svc ${verifyEnv}-service -n ${KUBE_NAMESPACE}
+                    """
                 }
             }
         }
