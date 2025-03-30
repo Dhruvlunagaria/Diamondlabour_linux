@@ -1,144 +1,99 @@
- pipeline {
+pipeline {
     agent any
-    environment {
-        KUBE_CONTEXT = "minikube"
-        NAMESPACE = "default"  
-        DOCKERHUB_REPO = "dhruv2412"
+
+    parameters {
+        choice(name: 'DEPLOY_ENV', choices: ['blue', 'green'], description: 'Select Deployment Environment (Blue or Green)')
+        booleanParam(name: 'SWITCH_TRAFFIC', defaultValue: false, description: 'Switch traffic to the selected environment')
     }
+
+    environment {
+        DOCKERHUB_REPO = "dhruv2412"
+        KUBE_NAMESPACE = "webapps"
+    }
+
     stages {
+
         stage('Checkout Code') {
             steps {
                 git branch: 'main', credentialsId: 'blue-green', url: 'https://github.com/Dhruvlunagaria/Diamondlabour_linux'
             }
         }
 
-        stage('Deploy New Version') {
+        stage('Deploy Blue or Green') {
             steps {
                 script {
-                    def currentVersion = sh(script: """kubectl get deployments -l app=active --no-headers -o custom-columns=':metadata.name' || echo none""", returnStdout: true).trim()
+                    def deploymentFile = "k8s/${params.DEPLOY_ENV}-deployment.yaml"
+                    def serviceFile = "k8s/${params.DEPLOY_ENV}-service.yaml"
 
-                    if (currentVersion == "none") {
-                        echo "🚀 First Deployment! Deploying Green..."
+                    withKubeConfig([credentialsId: 'k8-token', contextName: 'minikube', namespace: KUBE_NAMESPACE]) {
                         sh """
-                            kubectl apply -f k8s/green-deployment.yaml
-                            kubectl set image deployment/green-app frontend=${DOCKERHUB_REPO}/green-frontend:latest --record
-                            kubectl set image deployment/green-app backend=${DOCKERHUB_REPO}/green-backend:latest --record
+                            kubectl apply -f ${deploymentFile} -n ${KUBE_NAMESPACE}
+                            kubectl apply -f ${serviceFile} -n ${KUBE_NAMESPACE}
                         """
-                    } else if (currentVersion == "blue-app") {
-                        echo "🔵 Blue is Active. Deploying Green..."
-                        sh """
-                            kubectl apply -f k8s/green-deployment.yaml
-                            kubectl set image deployment/green-app frontend=${DOCKERHUB_REPO}/green-frontend:latest --record
-                            kubectl set image deployment/green-app backend=${DOCKERHUB_REPO}/green-backend:latest --record
-                        """
-                    } else {
-                        echo "🟢 Green is Active. Deploying Blue..."
-                        sh """
-                            kubectl apply -f k8s/blue-deployment.yaml
-                            kubectl set image deployment/blue-app frontend=${DOCKERHUB_REPO}/blue-frontend:latest --record
-                            kubectl set image deployment/blue-app backend=${DOCKERHUB_REPO}/blue-backend:latest --record
-                        """
+                    }
+                }
+            }
+        }
+
+        stage('Deploy Ingress') {
+            steps {
+                script {
+                    withKubeConfig([credentialsId: 'k8-token', contextName: 'minikube', namespace: KUBE_NAMESPACE]) {
+                        sh "kubectl apply -f k8s/ingress.yaml -n ${KUBE_NAMESPACE}"
                     }
                 }
             }
         }
 
         stage('Switch Traffic') {
+            when {
+                expression { return params.SWITCH_TRAFFIC }
+            }
             steps {
                 script {
-                    // def currentVersion = sh(script: "kubectl get deployments -l app=active --no-headers -o custom-columns=':metadata.name'", returnStdout: true).trim()
-                    def currentVersion = sh(script: "kubectl get pods -l app=active --no-headers -o custom-columns=':metadata.labels.app'", returnStdout: true).trim()
-                  
-                    if (currentVersion == "none" || currentVersion == "blue") {
-                        echo "✅ Switching traffic to Green..."
+                    def newEnv = params.DEPLOY_ENV
+
+                    withKubeConfig([credentialsId: 'k8-token', contextName: 'minikube', namespace: KUBE_NAMESPACE]) {
+                        sh '''
+                            kubectl patch ingress app-ingress -p '{
+                                "spec": { 
+                                    "rules": [{
+                                        "host": "app.minikube",
+                                        "http": {
+                                            "paths": [{
+                                                "path": "/",
+                                                "pathType": "Prefix",
+                                                "backend": {
+                                                    "service": {
+                                                        "name": "' + newEnv + '-service",
+                                                        "port": { "number": 80 }
+                                                    }
+                                                }
+                                            }]
+                                        }
+                                    }]
+                                }
+                            }' -n ${KUBE_NAMESPACE}
+                        '''
+                    }
+                    echo "Traffic switched to ${newEnv} environment!"
+                }
+            }
+        }
+
+        stage('Verify Deployment') {
+            steps {
+                script {
+                    def verifyEnv = params.DEPLOY_ENV
+
+                    withKubeConfig([credentialsId: 'k8-token', contextName: 'minikube', namespace: KUBE_NAMESPACE]) {
                         sh """
-                            kubectl label pods -l app=green app=active --overwrite
-                            kkubectl label pods -l app=blue app- --overwrite
-                        """
-                    } else {
-                        echo "✅ Switching traffic to Blue..."
-                        sh """
-                            kubectl label pods -l app=blue app=active --overwrite
-                            kubectl label pods -l app=green app- --overwrite
+                            kubectl get pods -l version=${verifyEnv} -n ${KUBE_NAMESPACE}
+                            kubectl get svc ${verifyEnv}-service -n ${KUBE_NAMESPACE}
                         """
                     }
-
-                    echo "⏳ Waiting for new pods to become ready..."
-                    sleep(time: 30, unit: "SECONDS")
                 }
             }
-        }
-
-        stage('Health Check') {
-            steps {
-                script {
-                    def maxRetries = 5
-                    def waitTime = 10  // seconds
-                    def success = false
-
-                    for (int i = 0; i < maxRetries; i++) {
-                        echo "🔍 Health Check Attempt ${i+1}/${maxRetries}..."
-                        def status = sh(script: 'curl -f http://diamondlab.com', returnStatus: true)
-
-                        if (status == 0) {
-                            echo "✅ Service is healthy!"
-                            success = true
-                            break
-                        }
-
-                        echo "⚠️ Service not ready yet. Retrying in ${waitTime} seconds..."
-                        sleep(time: waitTime, unit: "SECONDS")
-                    }
-
-                    if (!success) {
-                        error("❌ Deployment failed! Rolling back...")
-                    }
-                }
-            }
-        }
-
-        stage('Delete Old Version') {
-            steps {
-                script {
-                    def currentVersion = sh(script: "kubectl get deployments -l app=active --no-headers -o custom-columns=':metadata.name'", returnStdout: true).trim()
-
-                    if (currentVersion == "blue-app") {
-                        echo "🔵 Blue is Active. Deleting Green..."
-                        sh 'kubectl delete -f k8s/green-deployment.yaml || true'
-                    } else {
-                        echo "🟢 Green is Active. Deleting Blue..."
-                        sh 'kubectl delete -f k8s/blue-deployment.yaml || true'
-                    }
-                }
-            }
-        }
-    }
-    
-    post {
-        failure {
-            echo "❌ Deployment failed! Rolling back to previous version..."
-            script {
-                def previousVersion = sh(script: "kubectl get deployments -l app=active --no-headers -o custom-columns=':metadata.name'", returnStdout: true).trim()
-
-                if (previousVersion == "blue-app") {
-                    sh """
-                        kubectl apply -f k8s/blue-deployment.yaml
-                        kubectl apply -f k8s/ingress.yaml
-                    """
-                } else {
-                    sh """
-                        kubectl apply -f k8s/green-deployment.yaml
-                        kubectl apply -f k8s/ingress.yaml
-                    """
-                }
-            }
-        }
-        success {
-            echo "✅ Deployment successful!"
         }
     }
 }
-
-
-
-
