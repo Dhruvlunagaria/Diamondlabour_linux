@@ -116,7 +116,7 @@ pipeline {
                 script {
                     def deploymentFile = "k8s/${params.DEPLOY_ENV}-deployment.yaml"
                     def serviceFile = "k8s/${params.DEPLOY_ENV}-service.yaml"
-                    
+
                     sh """
                         echo "🚀 Deploying ${params.DEPLOY_ENV} environment..."
                         kubectl apply -f ${deploymentFile} -n ${KUBE_NAMESPACE}
@@ -153,7 +153,7 @@ pipeline {
                         kubectl apply -f k8s/ingress.yaml -n ${KUBE_NAMESPACE}
                         
                         # 🔄 Update Traffic Routing
-                        kubectl patch ingress app-ingress -p '{
+                        kubectl patch ingress app-ingress -n ${KUBE_NAMESPACE} --type='merge' -p '{
                             "spec": { 
                                 "rules": [{
                                     "host": "app.minikube",
@@ -163,7 +163,7 @@ pipeline {
                                             "pathType": "Prefix",
                                             "backend": {
                                                 "service": {
-                                                    "name": "''' + newEnv + '''-service",
+                                                    "name": "${newEnv}-service",
                                                     "port": { "number": 81 }
                                                 }
                                             }
@@ -171,7 +171,7 @@ pipeline {
                                     }
                                 }]
                             }
-                        }' -n ${KUBE_NAMESPACE}
+                        }'
 
                         echo "✅ Traffic successfully switched to ${newEnv} environment!"
                     """
@@ -185,15 +185,17 @@ pipeline {
                     def verifyEnv = params.DEPLOY_ENV
                     
                     sh """
-                        echo "🔍 Verifying deployment..."
+                        echo "🔍 Verifying ${verifyEnv} environment..."
                         kubectl get pods -l version=${verifyEnv} -n ${KUBE_NAMESPACE}
                         kubectl get svc ${verifyEnv}-service -n ${KUBE_NAMESPACE}
+                        kubectl get ingress -n ${KUBE_NAMESPACE}
                     """
                 }
             }
         }
     }
 }
+
 
 
 
