@@ -18,15 +18,19 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: app-ingress
+  namespace: webapps
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
   rules:
-  - host: diamondlab.com 
+  - host: app.minikube
     http:
       paths:
       - path: /
         pathType: Prefix
         backend:
           service:
-            name: green-service  # ✅ Default points to Green
+            name: blue-service  # ✅ Default to Blue
             port:
               number: 80
+
