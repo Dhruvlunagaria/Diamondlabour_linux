@@ -51,4 +51,5 @@ spec:
       - name: backend
         image: dhruv2412/green-backend:latest
         ports:
-        - containerPort:8001
+        - containerPort: 8001
+
