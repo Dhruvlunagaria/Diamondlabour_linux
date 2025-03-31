@@ -232,25 +232,25 @@ pipeline {
             steps {
                 script {
                     echo "🔄 Checking current traffic route..."
-                    
+
                     def activeServiceOutput = sh(script: "kubectl get ingress ${INGRESS_NAME} -n ${K8S_NAMESPACE} -o=jsonpath='{.spec.rules[0].http.paths[0].backend.service.name}'", returnStdout: true).trim()
 
-                    if (activeServiceOutput) {
-                        ACTIVE_SERVICE = activeServiceOutput
-                    } else {
-                        echo "⚠️ Failed to fetch ACTIVE_SERVICE, defaulting to blue-service"
-                        ACTIVE_SERVICE = "blue-service" // Fallback
-                    }
-                    
+                    def ACTIVE_SERVICE = activeServiceOutput ? activeServiceOutput : "blue-service" // Default to blue if empty
                     echo "✅ Current active service: ${ACTIVE_SERVICE}"
-                    
-                    // Switch to the new service
-                    NEW_SERVICE = (ACTIVE_SERVICE == "blue-service") ? "green-service" : "blue-service"
-                    NEW_PORT = (NEW_SERVICE == "blue-service") ? "80" : "81"
-                    
+
+                    def NEW_SERVICE = (ACTIVE_SERVICE == "blue-service") ? "green-service" : "blue-service"
+                    def NEW_PORT = (NEW_SERVICE == "blue-service") ? "80" : "81"
+
                     echo "🚀 Deploying ${NEW_SERVICE}..."
                     
-                    sh "kubectl apply -f k8s/${NEW_SERVICE}-deployment.yaml -n ${K8S_NAMESPACE}"
+                    // Validate file exists before applying it
+                    def deploymentFile = "k8s/${NEW_SERVICE}-deployment.yaml"
+                    if (fileExists(deploymentFile)) {
+                        sh "kubectl apply -f ${deploymentFile} -n ${K8S_NAMESPACE}"
+                    } else {
+                        error "❌ Deployment file ${deploymentFile} not found!"
+                    }
+
                     sh "kubectl apply -f k8s/${NEW_SERVICE}-service.yaml -n ${K8S_NAMESPACE}"
                 }
             }
@@ -269,7 +269,7 @@ pipeline {
             steps {
                 script {
                     echo "🔀 Switching traffic to ${NEW_SERVICE}..."
-                    
+
                     sh """kubectl patch ingress ${INGRESS_NAME} -n ${K8S_NAMESPACE} --type=merge -p '{
                         "spec": { 
                             "rules": [{
@@ -314,10 +314,6 @@ pipeline {
         }
     }
 }
-
-
-
-
 
 
 
