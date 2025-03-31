@@ -268,8 +268,10 @@ pipeline {
                 script {
                     sh """
                         echo "🔄 Checking current traffic route..."
+                        sleep 5
                         ACTIVE_SERVICE=\$(kubectl get ingress app-ingress -n ${KUBE_NAMESPACE} -o=jsonpath='{.spec.rules[0].http.paths[0].backend.service.name}' 2>/dev/null || echo "unknown")
-
+                        echo "ACTIVE_SERVICE: $ACTIVE_SERVICE"
+                        
                         if [ "\${ACTIVE_SERVICE}" = "blue-service" ]; then
                             NEW_SERVICE="green-service"
                             NEW_PORT=81
