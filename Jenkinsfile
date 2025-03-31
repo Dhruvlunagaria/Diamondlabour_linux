@@ -211,16 +211,23 @@
 pipeline {
     agent any
 
+    parameters {
+        choice(name: 'DEPLOY_ENV', choices: ['blue', 'green'], description: 'Select Deployment Environment (Blue or Green)')
+        booleanParam(name: 'SWITCH_TRAFFIC', defaultValue: false, description: 'Switch traffic to the selected environment')
+    }
+
     environment {
-        K8S_NAMESPACE = "webapps"
+        DOCKERHUB_REPO = "dhruv2412"
+        KUBE_NAMESPACE = "webapps"
         INGRESS_NAME = "app-ingress"
     }
 
     stages {
+
         stage('Checkout Code') {
             steps {
                 script {
-                    echo "📥 Checking out code from Git..."
+                    echo "📥 Checking out code..."
                     git branch: 'main', credentialsId: 'blue-green', url: 'https://github.com/Dhruvlunagaria/Diamondlabour_linux'
                 }
             }
@@ -229,27 +236,22 @@ pipeline {
         stage('Deploy Blue or Green') {
             steps {
                 script {
-                    echo "🔄 Checking current traffic route..."
+                    def deploymentFile = "k8s/${params.DEPLOY_ENV}-deployment.yaml"
+                    def serviceFile = "k8s/${params.DEPLOY_ENV}-service.yaml"
 
-                    def activeServiceOutput = sh(script: "kubectl get ingress ${INGRESS_NAME} -n ${K8S_NAMESPACE} -o=jsonpath='{.spec.rules[0].http.paths[0].backend.service.name}'", returnStdout: true).trim()
-
-                    def ACTIVE_SERVICE = activeServiceOutput ? activeServiceOutput : "blue-service" // Default to blue if empty
-                    echo "✅ Current active service: ${ACTIVE_SERVICE}"
-
-                    def NEW_SERVICE = (ACTIVE_SERVICE == "blue-service") ? "green-service" : "blue-service"
-                    def NEW_PORT = (NEW_SERVICE == "blue-service") ? "80" : "81"
-
-                    echo "🚀 Deploying ${NEW_SERVICE}..."
+                    echo "🚀 Deploying ${params.DEPLOY_ENV} environment..."
                     
-                    // Validate file exists before applying it
-                    def deploymentFile = "k8s/${NEW_SERVICE}-deployment.yaml"
                     if (fileExists(deploymentFile)) {
-                        sh "kubectl apply -f ${deploymentFile} -n ${K8S_NAMESPACE}"
+                        sh "kubectl apply -f ${deploymentFile} -n ${KUBE_NAMESPACE}"
                     } else {
                         error "❌ Deployment file ${deploymentFile} not found!"
                     }
 
-                    sh "kubectl apply -f k8s/${NEW_SERVICE}-service.yaml -n ${K8S_NAMESPACE}"
+                    if (fileExists(serviceFile)) {
+                        sh "kubectl apply -f ${serviceFile} -n ${KUBE_NAMESPACE}"
+                    } else {
+                        error "❌ Service file ${serviceFile} not found!"
+                    }
                 }
             }
         }
@@ -258,35 +260,59 @@ pipeline {
             steps {
                 script {
                     echo "🌐 Deploying Ingress..."
-                    sh "kubectl apply -f k8s/ingress.yaml -n ${K8S_NAMESPACE}"
+                    if (fileExists("k8s/ingress.yaml")) {
+                        sh "kubectl apply -f k8s/ingress.yaml -n ${KUBE_NAMESPACE}"
+                    } else {
+                        error "❌ Ingress file k8s/ingress.yaml not found!"
+                    }
                 }
             }
         }
 
         stage('Switch Traffic') {
+            when {
+                expression { return params.SWITCH_TRAFFIC }
+            }
             steps {
                 script {
-                    echo "🔀 Switching traffic to ${NEW_SERVICE}..."
+                    echo "🔄 Checking current traffic route..."
 
-                    sh """kubectl patch ingress ${INGRESS_NAME} -n ${K8S_NAMESPACE} --type=merge -p '{
-                        "spec": { 
-                            "rules": [{
-                                "host": "app.minikube",
-                                "http": {
-                                    "paths": [{
-                                        "path": "/",
-                                        "pathType": "Prefix",
-                                        "backend": {
-                                            "service": {
-                                                "name": "${NEW_SERVICE}",
-                                                "port": { "number": ${NEW_PORT} }
+                    def ACTIVE_SERVICE = sh(script: """
+                        kubectl get ingress ${INGRESS_NAME} -n ${KUBE_NAMESPACE} -o=jsonpath='{.spec.rules[0].http.paths[0].backend.service.name}' 2>/dev/null || echo "unknown"
+                    """, returnStdout: true).trim()
+
+                    def NEW_SERVICE = (ACTIVE_SERVICE == "blue-service") ? "green-service" : "blue-service"
+                    def NEW_PORT = (NEW_SERVICE == "blue-service") ? "80" : "81"
+
+                    echo "🔄 Switching traffic to ${NEW_SERVICE} (port ${NEW_PORT})..."
+
+                    sh """
+                        kubectl delete ingress ${INGRESS_NAME} -n ${KUBE_NAMESPACE} --ignore-not-found=true
+                        kubectl apply -f k8s/ingress.yaml -n ${KUBE_NAMESPACE}
+
+                        # Patch ingress to route traffic to the new service
+                        kubectl patch ingress ${INGRESS_NAME} -n ${KUBE_NAMESPACE} --type='merge' -p '{
+                            "spec": { 
+                                "rules": [{
+                                    "host": "app.minikube",
+                                    "http": {
+                                        "paths": [{
+                                            "path": "/",
+                                            "pathType": "Prefix",
+                                            "backend": {
+                                                "service": {
+                                                    "name": "'${NEW_SERVICE}'",
+                                                    "port": { "number": ${NEW_PORT} }
+                                                }
                                             }
-                                        }
-                                    }]
-                                }
-                            }]
-                        }
-                    }'"""
+                                        }]
+                                    }
+                                }]
+                            }
+                        }' || echo "❌ Failed to switch traffic to ${NEW_SERVICE}"
+                    """
+
+                    echo "✅ Traffic successfully switched to ${NEW_SERVICE}!"
                 }
             }
         }
@@ -294,10 +320,12 @@ pipeline {
         stage('Verify Deployment') {
             steps {
                 script {
-                    echo "🧐 Verifying new deployment..."
-                    sh "kubectl get pods -n ${K8S_NAMESPACE}"
-                    sh "kubectl get svc -n ${K8S_NAMESPACE}"
-                    sh "kubectl get ingress ${INGRESS_NAME} -n ${K8S_NAMESPACE} -o yaml"
+                    echo "🔍 Verifying deployment..."
+                    sh """
+                        kubectl get pods -n ${KUBE_NAMESPACE}
+                        kubectl get svc -n ${KUBE_NAMESPACE}
+                        kubectl get ingress ${INGRESS_NAME} -n ${KUBE_NAMESPACE} -o yaml
+                    """
                 }
             }
         }
@@ -312,6 +340,7 @@ pipeline {
         }
     }
 }
+
 
 
 
