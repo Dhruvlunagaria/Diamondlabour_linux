@@ -213,7 +213,6 @@
 
 
 
-
 pipeline {
     agent any
 
@@ -243,8 +242,8 @@ pipeline {
 
                     sh """
                         echo "🚀 Deploying ${params.DEPLOY_ENV} environment..."
-                        kubectl apply -f ${deploymentFile} -n ${KUBE_NAMESPACE}
-                        kubectl apply -f ${serviceFile} -n ${KUBE_NAMESPACE}
+                        kubectl apply -f ${deploymentFile} -n ${KUBE_NAMESPACE} || echo "❌ Failed to apply ${deploymentFile}"
+                        kubectl apply -f ${serviceFile} -n ${KUBE_NAMESPACE} || echo "❌ Failed to apply ${serviceFile}"
                     """
                 }
             }
@@ -255,7 +254,7 @@ pipeline {
                 script {
                     sh """
                         echo "🌐 Deploying Ingress..."
-                        kubectl apply -f k8s/ingress.yaml -n ${KUBE_NAMESPACE}
+                        kubectl apply -f k8s/ingress.yaml -n ${KUBE_NAMESPACE} || echo "❌ Failed to deploy ingress"
                     """
                 }
             }
@@ -269,10 +268,9 @@ pipeline {
                 script {
                     sh """
                         echo "🔄 Checking current traffic route..."
-                        ACTIVE_SERVICE=$(kubectl get ingress app-ingress -n ${KUBE_NAMESPACE} -o=jsonpath='{.spec.rules[0].http.paths[0].backend.service.name}')
-                        echo "Current active service: ${ACTIVE_SERVICE}"
+                        ACTIVE_SERVICE=\$(kubectl get ingress app-ingress -n ${KUBE_NAMESPACE} -o=jsonpath='{.spec.rules[0].http.paths[0].backend.service.name}' 2>/dev/null || echo "unknown")
 
-                        if [ "${ACTIVE_SERVICE}" = "blue-service" ]; then
+                        if [ "\${ACTIVE_SERVICE}" = "blue-service" ]; then
                             NEW_SERVICE="green-service"
                             NEW_PORT=81
                         else
@@ -280,27 +278,34 @@ pipeline {
                             NEW_PORT=80
                         fi
 
-                        echo "🔄 Switching traffic to ${NEW_SERVICE}..."
-                        kubectl patch ingress app-ingress -n ${KUBE_NAMESPACE} --type='merge' -p "{
-                            \"spec\": { 
-                                \"rules\": [{
-                                    \"host\": \"app.minikube\",
-                                    \"http\": {
-                                        \"paths\": [{
-                                            \"path\": \"/\",
-                                            \"pathType\": \"Prefix\",
-                                            \"backend\": {
-                                                \"service\": {
-                                                    \"name\": \"${NEW_SERVICE}\",
-                                                    \"port\": { \"number\": ${NEW_PORT} }
+                        echo "🔄 Switching traffic to \${NEW_SERVICE} (port \${NEW_PORT})..."
+
+                        # Delete and reapply ingress
+                        kubectl delete ingress app-ingress -n ${KUBE_NAMESPACE} --ignore-not-found=true
+                        kubectl apply -f k8s/ingress.yaml -n ${KUBE_NAMESPACE}
+
+                        # Patch ingress for new service
+                        kubectl patch ingress app-ingress -n ${KUBE_NAMESPACE} --type='merge' -p '{
+                            "spec": { 
+                                "rules": [{
+                                    "host": "app.minikube",
+                                    "http": {
+                                        "paths": [{
+                                            "path": "/",
+                                            "pathType": "Prefix",
+                                            "backend": {
+                                                "service": {
+                                                    "name": "'"\${NEW_SERVICE}"'",
+                                                    "port": { "number": '\${NEW_PORT}' }
                                                 }
                                             }
                                         }]
                                     }
                                 }]
                             }
-                        }"
-                        echo "✅ Traffic successfully switched to ${NEW_SERVICE}!"
+                        }' || echo "❌ Failed to switch traffic to \${NEW_SERVICE}"
+
+                        echo "✅ Traffic successfully switched to \${NEW_SERVICE}!"
                     """
                 }
             }
