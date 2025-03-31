@@ -282,6 +282,7 @@ pipeline {
 
                         # Delete and reapply ingress
                         kubectl delete ingress app-ingress -n ${KUBE_NAMESPACE} --ignore-not-found=true
+                        sleep 10
                         kubectl apply -f k8s/ingress.yaml -n ${KUBE_NAMESPACE}
 
                         # Patch ingress for new service
