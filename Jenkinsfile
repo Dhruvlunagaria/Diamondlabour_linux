@@ -270,9 +270,9 @@ pipeline {
                     sh """
                         echo "🔄 Checking current traffic route..."
                         ACTIVE_SERVICE=$(kubectl get ingress app-ingress -n ${KUBE_NAMESPACE} -o=jsonpath='{.spec.rules[0].http.paths[0].backend.service.name}')
-                        echo "Current active service: $ACTIVE_SERVICE"
+                        echo "Current active service: ${ACTIVE_SERVICE}"
 
-                        if [ "$ACTIVE_SERVICE" = "blue-service" ]; then
+                        if [ "${ACTIVE_SERVICE}" = "blue-service" ]; then
                             NEW_SERVICE="green-service"
                             NEW_PORT=81
                         else
@@ -280,7 +280,7 @@ pipeline {
                             NEW_PORT=80
                         fi
 
-                        echo "🔄 Switching traffic to $NEW_SERVICE..."
+                        echo "🔄 Switching traffic to ${NEW_SERVICE}..."
                         kubectl patch ingress app-ingress -n ${KUBE_NAMESPACE} --type='merge' -p "{
                             \"spec\": { 
                                 \"rules\": [{
@@ -291,8 +291,8 @@ pipeline {
                                             \"pathType\": \"Prefix\",
                                             \"backend\": {
                                                 \"service\": {
-                                                    \"name\": \"$NEW_SERVICE\",
-                                                    \"port\": { \"number\": $NEW_PORT }
+                                                    \"name\": \"${NEW_SERVICE}\",
+                                                    \"port\": { \"number\": ${NEW_PORT} }
                                                 }
                                             }
                                         }]
@@ -300,7 +300,7 @@ pipeline {
                                 }]
                             }
                         }"
-                        echo "✅ Traffic successfully switched to $NEW_SERVICE!"
+                        echo "✅ Traffic successfully switched to ${NEW_SERVICE}!"
                     """
                 }
             }
