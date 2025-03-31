@@ -277,20 +277,36 @@ pipeline {
                 script {
                     echo "🔄 Checking current traffic route..."
 
+                    // Get the currently active service from the ingress
                     def ACTIVE_SERVICE = sh(script: """
                         kubectl get ingress ${INGRESS_NAME} -n ${KUBE_NAMESPACE} -o=jsonpath='{.spec.rules[0].http.paths[0].backend.service.name}' 2>/dev/null || echo "unknown"
                     """, returnStdout: true).trim()
 
-                    def NEW_SERVICE = (ACTIVE_SERVICE == "blue-service") ? "green-service" : "blue-service"
-                    def NEW_PORT = (NEW_SERVICE == "blue-service") ? "80" : "81"
+                    echo "✅ Currently active: ${ACTIVE_SERVICE}"
+
+                    // Debugging: print the current ingress configuration
+                    echo "🔍 Current ingress configuration:"
+                    sh """
+                        kubectl get ingress ${INGRESS_NAME} -n ${KUBE_NAMESPACE} -o yaml
+                    """
+
+                    // Check if the active service is correctly identified
+                    if (ACTIVE_SERVICE == "unknown") {
+                        error "❌ Failed to retrieve active service from the ingress!"
+                    }
+
+                    // Determine the new service based on the current one
+                    def NEW_SERVICE = (ACTIVE_SERVICE == "green-service") ? "blue-service" : "green-service"
+                    def NEW_PORT = (NEW_SERVICE == "green-service") ? "81" : "80"  // Set port based on the service
 
                     echo "🔄 Switching traffic to ${NEW_SERVICE} (port ${NEW_PORT})..."
 
+                    // Delete the existing ingress and apply the updated ingress with the new service
                     sh """
                         kubectl delete ingress ${INGRESS_NAME} -n ${KUBE_NAMESPACE} --ignore-not-found=true
                         kubectl apply -f k8s/ingress.yaml -n ${KUBE_NAMESPACE}
 
-                        # Patch ingress to route traffic to the new service
+                        // Patch ingress to route traffic to the new service
                         kubectl patch ingress ${INGRESS_NAME} -n ${KUBE_NAMESPACE} --type='merge' -p '{
                             "spec": { 
                                 "rules": [{
