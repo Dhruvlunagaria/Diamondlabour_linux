@@ -107,7 +107,6 @@
 
 
 
-
 pipeline {
     agent any
 
@@ -178,12 +177,11 @@ pipeline {
                     // Determine which ingress file to apply
                     def NEW_INGRESS = (ACTIVE_SERVICE == "green-service") ? INGRESS_BLUE : INGRESS_GREEN
 
-                    echo "🔄 Switching traffic using ${NEW_INGRESS}..."
+                    echo "🗑️ Deleting existing ingress..."
+                    sh "kubectl delete ingress -n ${KUBE_NAMESPACE} --all --ignore-not-found=true"
 
-                    sh """
-                        kubectl delete ingress -n ${KUBE_NAMESPACE} --all --ignore-not-found=true
-                        kubectl apply -f ${NEW_INGRESS} -n ${KUBE_NAMESPACE}
-                    """
+                    echo "🚀 Applying new ingress: ${NEW_INGRESS}..."
+                    sh "kubectl apply -f ${NEW_INGRESS} -n ${KUBE_NAMESPACE}"
 
                     echo "✅ Traffic successfully switched!"
                 }
@@ -213,7 +211,6 @@ pipeline {
         }
     }
 }
-
 
 
 
