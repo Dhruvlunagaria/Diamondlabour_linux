@@ -1,4 +1,3 @@
-
 // pipeline {
 //     agent any
 
@@ -10,13 +9,18 @@
 //     environment {
 //         DOCKERHUB_REPO = "dhruv2412"
 //         KUBE_NAMESPACE = "webapps"
+//         INGRESS_BLUE = "k8s/ingress-blue.yaml"
+//         INGRESS_GREEN = "k8s/ingress-green.yaml"
 //     }
 
 //     stages {
 
 //         stage('Checkout Code') {
 //             steps {
-//                 git branch: 'main', credentialsId: 'blue-green', url: 'https://github.com/Dhruvlunagaria/Diamondlabour_linux'
+//                 script {
+//                     echo "📥 Checking out code..."
+//                     git branch: 'main', credentialsId: 'blue-green', url: 'https://github.com/Dhruvlunagaria/Diamondlabour_linux'
+//                 }
 //             }
 //         }
 
@@ -26,22 +30,19 @@
 //                     def deploymentFile = "k8s/${params.DEPLOY_ENV}-deployment.yaml"
 //                     def serviceFile = "k8s/${params.DEPLOY_ENV}-service.yaml"
 
-//                     sh """
-//                         echo "🚀 Deploying ${params.DEPLOY_ENV} environment..."
-//                         kubectl apply -f ${deploymentFile} -n ${KUBE_NAMESPACE}
-//                         kubectl apply -f ${serviceFile} -n ${KUBE_NAMESPACE}
-//                     """
-//                 }
-//             }
-//         }
+//                     echo "🚀 Deploying ${params.DEPLOY_ENV} environment..."
+                    
+//                     if (fileExists(deploymentFile)) {
+//                         sh "kubectl apply -f ${deploymentFile} -n ${KUBE_NAMESPACE}"
+//                     } else {
+//                         error "❌ Deployment file ${deploymentFile} not found!"
+//                     }
 
-//         stage('Deploy Ingress') {
-//             steps {
-//                 script {
-//                     sh """
-//                         echo "🌐 Deploying Ingress..."
-//                         kubectl apply -f k8s/ingress.yaml -n ${KUBE_NAMESPACE}
-//                     """
+//                     if (fileExists(serviceFile)) {
+//                         sh "kubectl apply -f ${serviceFile} -n ${KUBE_NAMESPACE}"
+//                     } else {
+//                         error "❌ Service file ${serviceFile} not found!"
+//                     }
 //                 }
 //             }
 //         }
@@ -52,38 +53,28 @@
 //             }
 //             steps {
 //                 script {
-//                     def newEnv = params.DEPLOY_ENV
+//                     echo "🔄 Checking current traffic route..."
 
-//                     sh """
-//                         echo "🔄 Switching Traffic to ${newEnv} environment..."
-                        
-//                         # 🚀 Delete & Reapply Ingress
-//                         kubectl delete ingress app-ingress -n ${KUBE_NAMESPACE} || true
-//                         kubectl apply -f k8s/ingress.yaml -n ${KUBE_NAMESPACE}
-                        
-//                         # 🔄 Update Traffic Routing
-//                         kubectl patch ingress app-ingress -n ${KUBE_NAMESPACE} --type='merge' -p '{
-//                             "spec": { 
-//                                 "rules": [{
-//                                     "host": "app.minikube",
-//                                     "http": {
-//                                         "paths": [{
-//                                             "path": "/",
-//                                             "pathType": "Prefix",
-//                                             "backend": {
-//                                                 "service": {
-//                                                     "name": "${newEnv}-service",
-//                                                     "port": { "number": 81 }
-//                                                 }
-//                                             }
-//                                         }]
-//                                     }
-//                                 }]
-//                             }
-//                         }'
+//                     def ACTIVE_SERVICE = sh(script: """
+//                         kubectl get ingress -n ${KUBE_NAMESPACE} -o=jsonpath='{.items[0].spec.rules[0].http.paths[0].backend.service.name}' || echo "unknown"
+//                     """, returnStdout: true).trim()
 
-//                         echo "✅ Traffic successfully switched to ${newEnv} environment!"
-//                     """
+//                     echo "✅ Currently active: ${ACTIVE_SERVICE}"
+
+//                     if (ACTIVE_SERVICE == "unknown") {
+//                         error "❌ Failed to retrieve active service from the ingress!"
+//                     }
+
+//                     // Determine which ingress file to apply
+//                     def NEW_INGRESS = (ACTIVE_SERVICE == "green-service") ? INGRESS_BLUE : INGRESS_GREEN
+
+//                     echo "🗑️ Deleting existing ingress..."
+//                     sh "kubectl delete ingress -n ${KUBE_NAMESPACE} --all --ignore-not-found=true"
+
+//                     echo "🚀 Applying new ingress: ${NEW_INGRESS}..."
+//                     sh "kubectl apply -f ${NEW_INGRESS} -n ${KUBE_NAMESPACE}"
+
+//                     echo "✅ Traffic successfully switched!"
 //                 }
 //             }
 //         }
@@ -91,19 +82,36 @@
 //         stage('Verify Deployment') {
 //             steps {
 //                 script {
-//                     def verifyEnv = params.DEPLOY_ENV
-                    
+//                     echo "🔍 Verifying deployment..."
 //                     sh """
-//                         echo "🔍 Verifying ${verifyEnv} environment..."
-//                         kubectl get pods -l version=${verifyEnv} -n ${KUBE_NAMESPACE}
-//                         kubectl get svc ${verifyEnv}-service -n ${KUBE_NAMESPACE}
-//                         kubectl get ingress -n ${KUBE_NAMESPACE}
+//                         kubectl get pods -n ${KUBE_NAMESPACE}
+//                         kubectl get svc -n ${KUBE_NAMESPACE}
+//                         kubectl get ingress -n ${KUBE_NAMESPACE} -o yaml
 //                     """
 //                 }
 //             }
 //         }
 //     }
+
+//     post {
+//         success {
+//             echo "✅ Blue-Green Deployment Successful!"
+//         }
+//         failure {
+//             echo "❌ Deployment failed. Check logs and debug."
+//         }
+//     }
 // }
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -133,6 +141,21 @@ pipeline {
             }
         }
 
+        stage('SonarQube Scan') {
+            steps {
+                script {
+                    echo "🔍 Running SonarQube scan..."
+                    sh """
+                        sonar-scanner \
+                          -Dsonar.projectKey=blue_green_sonar \
+                          -Dsonar.sources=. \
+                          -Dsonar.host.url=http://localhost:9000 \
+                          -Dsonar.token=sqp_ba4e8f91780da98eebd5d678815e3ffc5575d46c
+                    """
+                }
+            }
+        }
+
         stage('Deploy Blue or Green') {
             steps {
                 script {
@@ -140,7 +163,7 @@ pipeline {
                     def serviceFile = "k8s/${params.DEPLOY_ENV}-service.yaml"
 
                     echo "🚀 Deploying ${params.DEPLOY_ENV} environment..."
-                    
+
                     if (fileExists(deploymentFile)) {
                         sh "kubectl apply -f ${deploymentFile} -n ${KUBE_NAMESPACE}"
                     } else {
@@ -174,7 +197,6 @@ pipeline {
                         error "❌ Failed to retrieve active service from the ingress!"
                     }
 
-                    // Determine which ingress file to apply
                     def NEW_INGRESS = (ACTIVE_SERVICE == "green-service") ? INGRESS_BLUE : INGRESS_GREEN
 
                     echo "🗑️ Deleting existing ingress..."
