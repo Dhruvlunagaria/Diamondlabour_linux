@@ -150,7 +150,7 @@ pipeline {
                           -Dsonar.projectKey=blue_green_sonar \
                           -Dsonar.sources=. \
                           -Dsonar.host.url=http://localhost:9000 \
-                          -Dsonar.token=sqp_ba4e8f91780da98eebd5d678815e3ffc5575d46c
+                          -Dsonar.token=sqp_68da0ac216eaf86acc4891ad6101d3f559272a62
                     """
                 }
             }
