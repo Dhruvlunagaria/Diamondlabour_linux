@@ -49,7 +49,7 @@ spec:
         ports:
         - containerPort: 3000
       - name: backend
-        image: dhruv2412/blue-backend:latest
+        image: dhruv2412/blue-backend:v1.0.3
         ports:
         - containerPort: 8000
 
